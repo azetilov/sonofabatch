@@ -119,6 +119,35 @@ Providing a serviceUrl in one of 3 places
 - mergeHeaders: will take the headers from the batch request and add them to the headers of each request defined in the payload
 - protocol: only useful when not passing serviceUrl. will set the protocol used when defaulting to 127.0.0.1
 - port: only useful when not passing serviceUrl. will set the port used when defaulting to 127.0.0.1
+- formatter: a function to customize response structure
+
+### response formatter
+In case you want to include more information about each response, you can add formatter function which will be invoked for every response in a batch.
+
+Example:
+```
+function statusCodeFormatter(err, response, body) {
+  return { statusCode: response.statusCode, body };
+}
+
+const batch = new SonOfABatch({ formatter: statusCodeFormatter });
+```
+
+Response:
+```
+[
+  {
+    statusCode: 200,
+    body: {
+      hello: "world"
+    }
+  },
+  {
+    statusCode: 404,
+    body: "Not Found"
+  }
+]
+```
 
 ### TODO
 - add tests

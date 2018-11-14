@@ -3,17 +3,21 @@ const request = require('request');
 const _ = require('lodash');
 
 class SonOfABatch {
-  
+
   constructor(opts) {
     this.opts = opts || {};
 
     // if the middleware is passed an explict host and port to default to, set it up.
     this.defaultServiceUrl = this.opts.serviceUrl;
     if (!this.defaultServiceUrl) {
-      this.defaultServiceUrl = `${this.opts.protocol||'http'}://127.0.0.1`;
+      this.defaultServiceUrl = `${this.opts.protocol || 'http'}://127.0.0.1`;
       if (this.opts.port) {
         this.defaultServiceUrl += `:${this.opts.port}`;
       }
+    }
+
+    if (!this.opts.formatter) {
+      this.opts.formatter = this.defaultFormatter;
     }
 
     _.bindAll(this, 'call');
@@ -22,31 +26,31 @@ class SonOfABatch {
   call(req, res) {
     if (process.env.DEBUG) {
       console.log('sonofabatch: req.headers received');
-      console.log(JSON.stringify(req.headers,null,'\t'));
+      console.log(JSON.stringify(req.headers, null, '\t'));
     }
-    let execution = req.body.execution || 'parallel';
-    let requests  = req.body.requests;
+    const execution = req.body.execution || 'parallel';
+    const requests = req.body.requests;
     // the serviceUrl can be passed at the top-level of the request and apply to all calls.
-    let globalServiceUrl = req.body.serviceUrl;
+    const globalServiceUrl = req.body.serviceUrl;
 
     async.map(requests,
       (r, mapCb) => {
-        let serviceUrl = r.serviceUrl
+        const serviceUrl = r.serviceUrl
           ? r.serviceUrl
           : globalServiceUrl || this.defaultServiceUrl;
 
         let headers = r.headers;
         if (this.opts.mergeHeaders) {
-          let headersToMerge = this.opts.mergeHeaders.split(',');
+          const headersToMerge = this.opts.mergeHeaders.split(',');
           headers = Object.assign({}, _.pick(req.headers, headersToMerge), r.headers);
         }
 
-        let opts = {
-          url     : `${serviceUrl}${r.path}`,
-          method  : r.method,
-          headers : headers,
-          json    : true,
-          gzip    : this.isGzip(headers)
+        const opts = {
+          url: `${serviceUrl}${r.path}`,
+          method: r.method,
+          headers: headers,
+          json: true,
+          gzip: this.isGzip(headers)
         };
 
         if (r.query) {
@@ -58,26 +62,26 @@ class SonOfABatch {
 
         if (process.env.DEBUG) {
           console.log('sonofabatch: request options being passed');
-          console.log(JSON.stringify(opts,null,'\t'));
+          console.log(JSON.stringify(opts, null, '\t'));
         }
 
-        let composedCb = (callback) => {
+        const composedCb = (callback) => {
           request(opts, (err, response, body) => {
-            callback(err, body);
+            callback(err, this.opts.formatter(err, response, body));
           });
         };
-        
-        mapCb(null, composedCb);
-    },
-    (err, calls) => {
-      if (err) return res.sendStatus(500);
 
-      async[execution](calls, (err, results) => {
+        mapCb(null, composedCb);
+      },
+      (err, calls) => {
         if (err) return res.sendStatus(500);
 
-        res.send(results);
-      })
-    });
+        async[execution](calls, (err, results) => {
+          if (err) return res.sendStatus(500);
+
+          res.send(results);
+        })
+      });
   }
 
   isGzip(headers) {
@@ -88,6 +92,10 @@ class SonOfABatch {
     if (!acceptEncoding) { return false; }
 
     return acceptEncoding.includes('gzip');
+  }
+
+  defaultFormatter(err, response, body) {
+    return body;
   }
 
 }
